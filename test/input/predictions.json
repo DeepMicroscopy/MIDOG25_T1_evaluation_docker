@@ -1,0 +1,185 @@
+[
+    {
+        "pk": "c82e7041-c42b-49c2-96d5-b0d8ec8bdc8f",
+        "inputs": [
+            {
+                "file": null,
+                "image": {
+                    "name": "the_original_filename_of_the_file_that_was_uploaded.suffix"
+                },
+                "value": null,
+                "interface": {
+                    "slug": "histopathology-region-of-interest-cropout",
+                    "kind": "Image",
+                    "super_kind": "Image",
+                    "relative_path": "images/histopathology-roi-cropout",
+                    "example_value": null
+                }
+            }
+        ],
+        "outputs": [
+            {
+                "file": "https://grand-challenge.org/media/some-link/mitotic-figures.json",
+                "image": null,
+                "value": null,
+                "interface": {
+                    "slug": "mitotic-figures",
+                    "kind": "Multiple points",
+                    "super_kind": "File",
+                    "relative_path": "mitotic-figures.json",
+                    "example_value": {
+                        "name": "Points of interest",
+                        "type": "Multiple points",
+                        "points": [
+                            {
+                                "name": "Point 1",
+                                "point": [
+                                    96.0,
+                                    79.8,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            },
+                            {
+                                "name": "Point 2",
+                                "point": [
+                                    130.1,
+                                    115.5,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            }
+                        ],
+                        "version": {
+                            "major": 1,
+                            "minor": 0
+                        }
+                    }
+                }
+            }
+        ],
+        "status": "Succeeded"
+    },
+    {
+        "pk": "9366d3f0-4484-4e23-87bc-e879ce6878ec",
+        "inputs": [
+            {
+                "file": null,
+                "image": {
+                    "name": "the_original_filename_of_the_file_that_was_uploaded.suffix"
+                },
+                "value": null,
+                "interface": {
+                    "slug": "histopathology-region-of-interest-cropout",
+                    "kind": "Image",
+                    "super_kind": "Image",
+                    "relative_path": "images/histopathology-roi-cropout",
+                    "example_value": null
+                }
+            }
+        ],
+        "outputs": [
+            {
+                "file": "https://grand-challenge.org/media/some-link/mitotic-figures.json",
+                "image": null,
+                "value": null,
+                "interface": {
+                    "slug": "mitotic-figures",
+                    "kind": "Multiple points",
+                    "super_kind": "File",
+                    "relative_path": "mitotic-figures.json",
+                    "example_value": {
+                        "name": "Points of interest",
+                        "type": "Multiple points",
+                        "points": [
+                            {
+                                "name": "Point 1",
+                                "point": [
+                                    96.0,
+                                    79.8,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            },
+                            {
+                                "name": "Point 2",
+                                "point": [
+                                    130.1,
+                                    115.5,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            }
+                        ],
+                        "version": {
+                            "major": 1,
+                            "minor": 0
+                        }
+                    }
+                }
+            }
+        ],
+        "status": "Succeeded"
+    },
+    {
+        "pk": "0cb7cb36-4819-4c69-a43d-45b4de395e8d",
+        "inputs": [
+            {
+                "file": null,
+                "image": {
+                    "name": "the_original_filename_of_the_file_that_was_uploaded.suffix"
+                },
+                "value": null,
+                "interface": {
+                    "slug": "histopathology-region-of-interest-cropout",
+                    "kind": "Image",
+                    "super_kind": "Image",
+                    "relative_path": "images/histopathology-roi-cropout",
+                    "example_value": null
+                }
+            }
+        ],
+        "outputs": [
+            {
+                "file": "https://grand-challenge.org/media/some-link/mitotic-figures.json",
+                "image": null,
+                "value": null,
+                "interface": {
+                    "slug": "mitotic-figures",
+                    "kind": "Multiple points",
+                    "super_kind": "File",
+                    "relative_path": "mitotic-figures.json",
+                    "example_value": {
+                        "name": "Points of interest",
+                        "type": "Multiple points",
+                        "points": [
+                            {
+                                "name": "Point 1",
+                                "point": [
+                                    96.0,
+                                    79.8,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            },
+                            {
+                                "name": "Point 2",
+                                "point": [
+                                    130.1,
+                                    115.5,
+                                    0.5
+                                ],
+                                "probability": 0.92
+                            }
+                        ],
+                        "version": {
+                            "major": 1,
+                            "minor": 0
+                        }
+                    }
+                }
+            }
+        ],
+        "status": "Succeeded"
+    }
+]

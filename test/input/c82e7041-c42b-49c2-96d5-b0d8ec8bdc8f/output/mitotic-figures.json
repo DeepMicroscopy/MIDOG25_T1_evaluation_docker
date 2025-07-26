@@ -1,0 +1,28 @@
+{
+    "name": "Points of interest",
+    "type": "Multiple points",
+    "points": [
+        {
+            "name": "Point 1",
+            "point": [
+                96.0,
+                79.8,
+                0.5
+            ],
+            "probability": 0.92
+        },
+        {
+            "name": "Point 2",
+            "point": [
+                130.1,
+                115.5,
+                0.5
+            ],
+            "probability": 0.92
+        }
+    ],
+    "version": {
+        "major": 1,
+        "minor": 0
+    }
+}
