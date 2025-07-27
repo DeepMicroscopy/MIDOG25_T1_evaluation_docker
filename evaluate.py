@@ -34,6 +34,7 @@ import json
 import random
 from statistics import mean
 from pathlib import Path
+from torch import Tensor, IntTensor
 from pprint import pformat, pprint
 import numpy as np
 from helpers import run_prediction_processing, tree
@@ -45,7 +46,6 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 INPUT_DIRECTORY = Path("/input")
 OUTPUT_DIRECTORY = Path("/output")
 
-map_metric = MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist())
 
 def main():
     print_inputs()
@@ -62,10 +62,58 @@ def main():
 
     # We have the results per prediction, we can aggregate the results and
     # generate an overall score(s) for this submission
+
+    tumordomains = np.unique([result["tumor_domain"] for result in metrics["results"]])
+
+    map_metric = MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist())
+    per_tumor_map_metric = {d : MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist()) for d in tumordomains}
+    per_tumor = {d : {'tp': 0, 'fp':0, 'fn':0} for d in tumordomains}
+
+
+    tp,fp,fn = 0,0,0
+
+    for result in metrics["results"]:
+        tp += result["metrics"]["true_positives"]            
+        fp += result["metrics"]["false_positives"]            
+        fn += result["metrics"]["false_negatives"] 
+        bbox_size = 0.01125 # equals to 7.5mm distance for horizontal distance at 0.5 IOU
+
+        pred_dict = [{'boxes': Tensor([[x-bbox_size,y-bbox_size, x+bbox_size, y+bbox_size] for (x,y,z,_,_) in result["pred"]]), 
+                        'labels': IntTensor([1,]*len(result["pred"])),
+                        'scores': Tensor([sc for (x,y,z,_,sc) in result["pred"]])}]
+
+
+        target_dict = [{'boxes': Tensor([[x-bbox_size,y-bbox_size, x+bbox_size, y+bbox_size] for (x,y,z) in result["gt"]]),
+                                'labels' : IntTensor([1,]*len(result["gt"]))}]
+
+        map_metric.update(pred_dict,target_dict)
+        per_tumor_map_metric[result["tumor_domain"]].update(pred_dict,target_dict)
+        per_tumor[result["tumor_domain"]]['tp'] += result["metrics"]["true_positives"] 
+        per_tumor[result["tumor_domain"]]['fp'] += result["metrics"]["false_positives"] 
+        per_tumor[result["tumor_domain"]]['fn'] += result["metrics"]["false_negatives"] 
+
+
+    eps = 1E-6
+    aggregate_results=dict()
+    aggregate_results["precision"] = tp / (tp + fp + eps)
+    aggregate_results["recall"] = tp / (tp + fn + eps)
+    aggregate_results["f1_score"] = (2 * tp + eps) / ((2 * tp) + fp + fn + eps)
+
+    metrics_values = map_metric.compute()
+    aggregate_results["mAP"] = metrics_values['map_50'].tolist()
+
+    for tumor in per_tumor:
+        aggregate_results[f'tumor_{tumor}_precision'] = per_tumor[tumor]['tp'] / (per_tumor[tumor]['tp'] + per_tumor[tumor]['fp'] + eps)
+        aggregate_results[f'tumor_{tumor}_recall'] = per_tumor[tumor]['tp'] / (per_tumor[tumor]['tp'] + per_tumor[tumor]['fn'] + eps)
+        aggregate_results[f'tumor_{tumor}_f1'] = (2 * per_tumor[tumor]['tp'] + eps) / ((2 * per_tumor[tumor]['tp']) + per_tumor[tumor]['fp'] + per_tumor[tumor]['fn'] + eps) 
+
+        pt_metrics_values = per_tumor_map_metric[tumor].compute()
+        aggregate_results[f"tumor_{tumor}_mAP"] = pt_metrics_values['map_50'].tolist()
+
     if metrics["results"]:
-        metrics["aggregates"] = {
-            "my_metric": mean(result["my_metric"] for result in metrics["results"])
-        }
+        metrics["aggregates"] = aggregate_results
+
+    metrics["results"] = []
 
     # Make sure to save the metrics
     write_metrics(metrics=metrics)
@@ -118,7 +166,7 @@ def process_interf0(
     with open(
         ground_truth_dir / "ground_truth.json", "r"
     ) as f:
-        truth = f.read()
+        truth = json.loads(f.read())
 
     if image_name_histopathology_region_of_interest_cropout not in truth:
         raise NameError(f'Ground truth for processed image {image_name_histopathology_region_of_interest_cropout} not found.')
@@ -132,14 +180,13 @@ def process_interf0(
             detected_thr   = 0.5 if 'probability' not in point else point['probability']
 
             if 'name' not in point:
-                print('Warning: Old format. Field name is not part of detections.')
+                raise SyntaxError('Field name is not part of detections.')
 
             if 'probability' not in point:
-                print('Warning: Old format. Field probability is not part of detections.')
+                raise SyntaxError('Field probability is not part of detections.')
             
             if 'point' not in point:
-                print('Warning: Point is not part of points structure.')
-                continue
+                raise SyntaxError('Point is not part of points structure.')
 
             points.append([*point['point'][0:3], detected_class, detected_thr])
 
@@ -154,9 +201,12 @@ def process_interf0(
     return {
         "image" : image_name_histopathology_region_of_interest_cropout,
         "gt" : truth[image_name_histopathology_region_of_interest_cropout]['annotations'],
+        "tumor_domain" : truth[image_name_histopathology_region_of_interest_cropout]['tumor domain'],
         "pred" : points,
         "metrics" : sc,
     }
+
+
 
 
 def print_inputs():

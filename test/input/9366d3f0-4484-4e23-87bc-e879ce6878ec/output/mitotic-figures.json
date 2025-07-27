@@ -3,22 +3,22 @@
     "type": "Multiple points",
     "points": [
         {
-            "name": "Point 1",
+            "name": "mitotic figure",
             "point": [
-                96.0,
-                79.8,
-                0.5
+                0.701136862260162, 
+                0.5339582751605569,
+                0
             ],
-            "probability": 0.92
+            "probability": 0.85
         },
         {
-            "name": "Point 2",
+            "name": "mitotic figure",
             "point": [
-                130.1,
-                115.5,
-                0.5
+                0.004106115122262555, 
+                0.017197810044277795, 
+                0
             ],
-            "probability": 0.92
+            "probability": 0.52
         }
     ],
     "version": {

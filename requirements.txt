@@ -4,3 +4,4 @@ psutil
 evalutils
 torchmetrics
 pycocotools
+torchvision
