@@ -113,7 +113,8 @@ def main():
     if metrics["results"]:
         metrics["aggregates"] = aggregate_results
 
-    metrics["results"] = []
+    for k,_ in enumerate(metrics["results"]):
+        metrics["results"][k]["gt"] = []
 
     # Make sure to save the metrics
     write_metrics(metrics=metrics)
