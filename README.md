@@ -55,7 +55,7 @@ The mitotic-figure.json files to be expected from the docker containers of the p
             "probability": 0.92
         },
         {
-            "name": "mitotic figure",
+            "name": "non-mitotic figure",
             "point": [
                 1.3,
                 1.1,
