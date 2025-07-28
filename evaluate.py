@@ -46,6 +46,7 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 INPUT_DIRECTORY = Path("/input")
 OUTPUT_DIRECTORY = Path("/output")
 
+roi_types = ["hotspot","challenging","random"]
 
 def main():
     print_inputs()
@@ -68,6 +69,8 @@ def main():
     map_metric = MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist())
     per_tumor_map_metric = {d : MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist()) for d in tumordomains}
     per_tumor = {d : {'tp': 0, 'fp':0, 'fn':0} for d in tumordomains}
+    per_roi_type = {d : {'tp': 0, 'fp':0, 'fn':0} for d in roi_types}
+    per_roi_type_map_metric = {d : MeanAveragePrecision(box_format='xyxy', iou_type='bbox', max_detection_thresholds=[1,10,1e6], rec_thresholds=np.arange(0,1.01,0.01).tolist()) for d in roi_types}
 
 
     tp,fp,fn = 0,0,0
@@ -88,9 +91,19 @@ def main():
 
         map_metric.update(pred_dict,target_dict)
         per_tumor_map_metric[result["tumor_domain"]].update(pred_dict,target_dict)
+        per_roi_type_map_metric[result["roi_type"]].update(pred_dict, target_dict)
+
+        # accumulate for ROI type
         per_tumor[result["tumor_domain"]]['tp'] += result["metrics"]["true_positives"] 
         per_tumor[result["tumor_domain"]]['fp'] += result["metrics"]["false_positives"] 
         per_tumor[result["tumor_domain"]]['fn'] += result["metrics"]["false_negatives"] 
+
+
+        # accumulate for ROI type
+        per_roi_type[result["roi_type"]]['tp'] += result["metrics"]["true_positives"] 
+        per_roi_type[result["roi_type"]]['fp'] += result["metrics"]["false_positives"] 
+        per_roi_type[result["roi_type"]]['fn'] += result["metrics"]["false_negatives"] 
+
 
 
     eps = 1E-6
@@ -100,7 +113,7 @@ def main():
     aggregate_results["f1_score"] = (2 * tp + eps) / ((2 * tp) + fp + fn + eps)
 
     metrics_values = map_metric.compute()
-    aggregate_results["mAP"] = metrics_values['map_50'].tolist()
+    aggregate_results["AP"] = metrics_values['map_50'].tolist()
 
     for tumor in per_tumor:
         aggregate_results[f'tumor_{tumor}_precision'] = per_tumor[tumor]['tp'] / (per_tumor[tumor]['tp'] + per_tumor[tumor]['fp'] + eps)
@@ -108,7 +121,16 @@ def main():
         aggregate_results[f'tumor_{tumor}_f1'] = (2 * per_tumor[tumor]['tp'] + eps) / ((2 * per_tumor[tumor]['tp']) + per_tumor[tumor]['fp'] + per_tumor[tumor]['fn'] + eps) 
 
         pt_metrics_values = per_tumor_map_metric[tumor].compute()
-        aggregate_results[f"tumor_{tumor}_mAP"] = pt_metrics_values['map_50'].tolist()
+        aggregate_results[f"tumor_{tumor}_AP"] = pt_metrics_values['map_50'].tolist()
+
+    for roi_type in per_roi_type:
+        aggregate_results[f'roi_type_{roi_type}_precision'] = per_roi_type[roi_type]['tp'] / (per_roi_type[roi_type]['tp'] + per_roi_type[roi_type]['fp'] + eps)
+        aggregate_results[f'roi_type_{roi_type}_recall'] = per_roi_type[roi_type]['tp'] / (per_roi_type[roi_type]['tp'] + per_roi_type[roi_type]['fn'] + eps)
+        aggregate_results[f'roi_type_{roi_type}_f1'] = (2 * per_roi_type[roi_type]['tp'] + eps) / ((2 * per_roi_type[roi_type]['tp']) + per_roi_type[roi_type]['fp'] + per_roi_type[roi_type]['fn'] + eps) 
+
+        pt_metrics_values = per_roi_type_map_metric[roi_type].compute()
+        aggregate_results[f"roi_type_{roi_type}_AP"] = pt_metrics_values['map_50'].tolist()
+
 
     if metrics["results"]:
         metrics["aggregates"] = aggregate_results
@@ -175,19 +197,47 @@ def process_interf0(
     if 'points' not in result_mitotic_figures:
         raise SyntaxError('Results must contain dictionary with "points" field. ')
 
-    points=[]
-    for point in result_mitotic_figures['points']:
-            detected_class = 1 if 'name' not in point or point['name']=='mitotic figure' else 0
-            detected_thr   = 0.5 if 'probability' not in point else point['probability']
 
+
+    if 'annotations' not in truth[image_name_histopathology_region_of_interest_cropout]:
+        raise SyntaxError(f"No GT annotations found case {image_name_histopathology_region_of_interest_cropout}.")
+    
+
+    if not isinstance(truth[image_name_histopathology_region_of_interest_cropout], dict):
+        raise TypeError(f"Annotation for {image_name_histopathology_region_of_interest_cropout} is not of type dictionary. ")
+    
+    if 'annotations' not in truth[image_name_histopathology_region_of_interest_cropout]:
+        raise ValueError(f"Value 'annotations' missing for GT annotation for image {image_name_histopathology_region_of_interest_cropout}")
+    
+    if 'roi type' not in truth[image_name_histopathology_region_of_interest_cropout]:
+        raise ValueError(f"Value 'roi type' missing for GT annotation for image {image_name_histopathology_region_of_interest_cropout}")
+    
+    if truth[image_name_histopathology_region_of_interest_cropout]['roi type'] not in roi_types:
+        raise ValueError(f'Invalid ROI type definition {truth[image_name_histopathology_region_of_interest_cropout]["roi type"]}. Valid values are: {str(roi_types)}')
+        
+
+    points=[]
+    valid_names = ['mitotic figure','non-mitotic figure']
+    for point in result_mitotic_figures['points']:
+            
+            if not isinstance(point, dict):
+                raise SyntaxError('All points need to be dictionaries. Please see example output for required format. ')
+            
             if 'name' not in point:
-                raise SyntaxError('Field name is not part of detections.')
+                raise SyntaxError('Field name is not part of detections. Please see example output for required format. ')
 
             if 'probability' not in point:
-                raise SyntaxError('Field probability is not part of detections.')
+                raise SyntaxError('Field probability is not part of detections. Please see example output for required format. ')
             
             if 'point' not in point:
-                raise SyntaxError('Point is not part of points structure.')
+                raise SyntaxError('Point is not part of points structure. Please see example output for required format. ')
+            
+            if point['name'] not in valid_names:
+                raise ValueError(f'Invalid setting for class of detection: {point["name"]}. Valid values are: {str(valid_names)}')
+            
+            detected_class = 1 if 'name' not in point or point['name']=='mitotic figure' else 0
+            detected_thr   = point['probability']
+
 
             points.append([*point['point'][0:3], detected_class, detected_thr])
 
@@ -205,6 +255,7 @@ def process_interf0(
         "tumor_domain" : truth[image_name_histopathology_region_of_interest_cropout]['tumor domain'],
         "pred" : points,
         "metrics" : sc,
+        "roi_type" : truth[image_name_histopathology_region_of_interest_cropout]['roi type']
     }
 
 
