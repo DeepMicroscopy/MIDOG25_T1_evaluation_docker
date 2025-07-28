@@ -32,28 +32,29 @@
                         "type": "Multiple points",
                         "points": [
                             {
-                                "name": "Point 1",
+                                "name": "mitotic figure",
                                 "point": [
-                                    96.0,
-                                    79.8,
-                                    0.5
+                                    0.04,
+                                    0.8,
+                                    0
                                 ],
                                 "probability": 0.92
                             },
                             {
-                                "name": "Point 2",
+                                "name": "non-mitotic figure",
                                 "point": [
-                                    130.1,
-                                    115.5,
-                                    0.5
+                                    1.3,
+                                    1.1,
+                                    0
                                 ],
-                                "probability": 0.92
+                                "probability": 0.4
                             }
                         ],
                         "version": {
                             "major": 1,
                             "minor": 0
                         }
+
                     }
                 }
             }
@@ -93,28 +94,29 @@
                         "type": "Multiple points",
                         "points": [
                             {
-                                "name": "Point 1",
+                                "name": "mitotic figure",
                                 "point": [
-                                    96.0,
-                                    79.8,
-                                    0.5
+                                    0.04,
+                                    0.8,
+                                    0
                                 ],
                                 "probability": 0.92
                             },
                             {
-                                "name": "Point 2",
+                                "name": "non-mitotic figure",
                                 "point": [
-                                    130.1,
-                                    115.5,
-                                    0.5
+                                    1.3,
+                                    1.1,
+                                    0
                                 ],
-                                "probability": 0.92
+                                "probability": 0.4
                             }
                         ],
                         "version": {
                             "major": 1,
                             "minor": 0
                         }
+                        
                     }
                 }
             }
@@ -154,22 +156,22 @@
                         "type": "Multiple points",
                         "points": [
                             {
-                                "name": "Point 1",
+                                "name": "mitotic figure",
                                 "point": [
-                                    96.0,
-                                    79.8,
-                                    0.5
+                                    0.04,
+                                    0.8,
+                                    0
                                 ],
                                 "probability": 0.92
                             },
                             {
-                                "name": "Point 2",
+                                "name": "non-mitotic figure",
                                 "point": [
-                                    130.1,
-                                    115.5,
-                                    0.5
+                                    1.3,
+                                    1.1,
+                                    0
                                 ],
-                                "probability": 0.92
+                                "probability": 0.4
                             }
                         ],
                         "version": {
