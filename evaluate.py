@@ -46,6 +46,7 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 INPUT_DIRECTORY = Path("/input")
 OUTPUT_DIRECTORY = Path("/output")
 
+MAXIMUM_MITOSIS_DETECTION_DISTANCE=7.5e-3
 roi_types = ["hotspot","challenging","random"]
 
 def main():
@@ -59,7 +60,12 @@ def main():
     # We work that out from predictions.json
 
     # Use concurrent workers to process the predictions more efficiently
-    metrics["results"] = run_prediction_processing(fn=process, predictions=predictions)
+
+    metrics["results"] = []
+    for result in predictions: 
+        print(f"Processing job {result['pk']}...")
+        # Each job is processed in a separate process
+        metrics["results"].append(process(result))
 
     # We have the results per prediction, we can aggregate the results and
     # generate an overall score(s) for this submission
@@ -74,18 +80,26 @@ def main():
 
 
     tp,fp,fn = 0,0,0
+    bbox_size = 0.01125 # equals to 7.5mm distance for horizontal distance at 0.5 IOU
+
+    all_preds = []
+    all_gts = []
+    per_tumor_preds = {d: [] for d in tumordomains}
+    per_tumor_gts = {d: [] for d in tumordomains}
+    per_roi_type_preds = {d: [] for d in roi_types}
+    per_roi_type_gts = {d: [] for d in roi_types}
 
     for result in metrics["results"]:
         tp += result["metrics"]["true_positives"]            
         fp += result["metrics"]["false_positives"]            
         fn += result["metrics"]["false_negatives"] 
-        bbox_size = 0.01125 # equals to 7.5mm distance for horizontal distance at 0.5 IOU
 
         pred_dict = [{'boxes': Tensor([[x-bbox_size,y-bbox_size, x+bbox_size, y+bbox_size] for (x,y,z,_,_) in result["pred"]]), 
                         'labels': IntTensor([1,]*len(result["pred"])),
                         'scores': Tensor([sc for (x,y,z,_,sc) in result["pred"]])}]
 
-
+        all_preds.append(result["pred"])
+        all_gts.append(result["gt"])
         target_dict = [{'boxes': Tensor([[x-bbox_size,y-bbox_size, x+bbox_size, y+bbox_size] for (x,y,z) in result["gt"]]),
                                 'labels' : IntTensor([1,]*len(result["gt"]))}]
 
@@ -98,19 +112,23 @@ def main():
         per_tumor[result["tumor_domain"]]['fp'] += result["metrics"]["false_positives"] 
         per_tumor[result["tumor_domain"]]['fn'] += result["metrics"]["false_negatives"] 
 
+        per_tumor_preds[result["tumor_domain"]].append(result["pred"])
+        per_tumor_gts[result["tumor_domain"]].append(result["gt"])  
 
         # accumulate for ROI type
         per_roi_type[result["roi_type"]]['tp'] += result["metrics"]["true_positives"] 
         per_roi_type[result["roi_type"]]['fp'] += result["metrics"]["false_positives"] 
         per_roi_type[result["roi_type"]]['fn'] += result["metrics"]["false_negatives"] 
 
-
+        per_roi_type_preds[result["roi_type"]].append(result["pred"])
+        per_roi_type_gts[result["roi_type"]].append(result["gt"])
 
     eps = 1E-6
     aggregate_results=dict()
     aggregate_results["precision"] = tp / (tp + fp + eps)
     aggregate_results["recall"] = tp / (tp + fn + eps)
     aggregate_results["f1_score"] = (2 * tp + eps) / ((2 * tp) + fp + fn + eps)
+    aggregate_results["froc_auc"] = calc_froc_score(all_gts, all_preds) 
 
     metrics_values = map_metric.compute()
     aggregate_results["AP"] = metrics_values['map_50'].tolist()
@@ -122,6 +140,7 @@ def main():
 
         pt_metrics_values = per_tumor_map_metric[tumor].compute()
         aggregate_results[f"tumor_{tumor}_AP"] = pt_metrics_values['map_50'].tolist()
+        aggregate_results[f'tumor_{tumor}_froc_auc'] = calc_froc_score(per_tumor_gts[tumor], per_tumor_preds[tumor])
 
     for roi_type in per_roi_type:
         aggregate_results[f'roi_type_{roi_type}_precision'] = per_roi_type[roi_type]['tp'] / (per_roi_type[roi_type]['tp'] + per_roi_type[roi_type]['fp'] + eps)
@@ -131,6 +150,7 @@ def main():
         pt_metrics_values = per_roi_type_map_metric[roi_type].compute()
         aggregate_results[f"roi_type_{roi_type}_AP"] = pt_metrics_values['map_50'].tolist()
 
+        aggregate_results[f'roi_type_{roi_type}_froc_auc'] = calc_froc_score(per_roi_type_gts[roi_type], per_roi_type_preds[roi_type])
 
     if metrics["results"]:
         metrics["aggregates"] = aggregate_results
@@ -156,6 +176,62 @@ def process(job):
     # Call the handler
     return handler(job)
 
+def calc_froc_score(ground_truth:list, detections:list, max_fp:int = 8, nbr_of_thresholds:int = 40):
+    """ Calculate the FROC (free-response operating characteristic) score. 
+    ground_truth: The ground truth annotations for the images.
+    detections: The detected mitotic figures.
+
+    This metric calculates the trade-off between sensitivity (true positive rate) and the number of false positives per image at various detection thresholds.
+
+    We use a maximum of 8 false positives per image for the calculation, as in: https://jamanetwork.com/journals/jama/fullarticle/2665774
+
+    More on this metric: https://metrics-reloaded.dkfz.de/metric?id=FROC_score
+    """
+    if len(detections) == 0:
+        return float('nan')
+    
+    valid_detections = [x for x in detections if len(x) > 0]
+    if len(valid_detections) == 0:
+        return float('nan')
+
+    all_detections_in_all_images = np.vstack([x for x in detections if len(x) > 0])
+    all_thresholds = np.array([sc for x,y,z,cls,sc in all_detections_in_all_images])
+    if np.min(all_thresholds) == np.max(all_thresholds):
+        threshold_list = [np.min(all_thresholds)]
+    else:
+        threshold_list = (np.linspace(np.min(all_thresholds),np.max(all_thresholds),nbr_of_thresholds)).tolist()
+
+    recalls={}
+    fppi={}
+    tps={}
+    fns={}
+    fps_per_image={}
+    for threshold in threshold_list:
+        tps[threshold] = 0
+        fns[threshold] = 0
+        fps_per_image[threshold] = []
+        for i in range(len(detections)):
+            filtered_predictions = [[x,y,0] for x,y,z,cls,sc in detections[i] if sc>=threshold]
+            sc = score_detection(ground_truth=ground_truth[i],predictions=filtered_predictions,radius=MAXIMUM_MITOSIS_DETECTION_DISTANCE)._asdict()
+            fps_per_image[threshold].append(sc['false_positives'])
+            tps[threshold] += sc['true_positives']
+            fns[threshold] += sc['false_negatives']
+        recalls[threshold] = tps[threshold] / (tps[threshold] + fns[threshold] + 1E-6)
+        fppi[threshold] = np.mean(fps_per_image[threshold])
+
+    # Sort by FPPI
+    fppi_arr = np.array(list(fppi.values()))
+    recall_arr = np.array(list(recalls.values()))
+    sort_idx = np.argsort(fppi_arr)
+    fppi_sorted = fppi_arr[sort_idx]
+    recall_sorted = recall_arr[sort_idx]
+
+    fppi_eval = np.linspace(0, max_fp, 50)
+    recall_interp = np.interp(fppi_eval, fppi_sorted, recall_sorted, left=0, right=recall_sorted[-1])
+
+    froc_auc = np.trapz(recall_interp, fppi_eval)
+
+    return froc_auc
 
 def process_interf0(
     job,
@@ -197,18 +273,12 @@ def process_interf0(
     if 'points' not in result_mitotic_figures:
         raise SyntaxError('Results must contain dictionary with "points" field. ')
 
-
-
     if 'annotations' not in truth[image_name_histopathology_region_of_interest_cropout]:
         raise SyntaxError(f"No GT annotations found case {image_name_histopathology_region_of_interest_cropout}.")
     
-
     if not isinstance(truth[image_name_histopathology_region_of_interest_cropout], dict):
         raise TypeError(f"Annotation for {image_name_histopathology_region_of_interest_cropout} is not of type dictionary. ")
-    
-    if 'annotations' not in truth[image_name_histopathology_region_of_interest_cropout]:
-        raise ValueError(f"Value 'annotations' missing for GT annotation for image {image_name_histopathology_region_of_interest_cropout}")
-    
+        
     if 'roi type' not in truth[image_name_histopathology_region_of_interest_cropout]:
         raise ValueError(f"Value 'roi type' missing for GT annotation for image {image_name_histopathology_region_of_interest_cropout}")
     
@@ -223,6 +293,7 @@ def process_interf0(
             if not isinstance(point, dict):
                 raise SyntaxError('All points need to be dictionaries. Please see example output for required format. ')
             
+            # New for MIDOG 2025: We no longer accept the MIDOG 21 output format, but require the MIDOG 22 output format.
             if 'name' not in point:
                 raise SyntaxError('Field name is not part of detections. Please see example output for required format. ')
 
@@ -235,9 +306,14 @@ def process_interf0(
             if point['name'] not in valid_names:
                 raise ValueError(f'Invalid setting for class of detection: {point["name"]}. Valid values are: {str(valid_names)}')
             
-            detected_class = 1 if 'name' not in point or point['name']=='mitotic figure' else 0
+            detected_class = 1 if point['name']=='mitotic figure' else 0
             detected_thr   = point['probability']
 
+            if point['point'][0] < -MAXIMUM_MITOSIS_DETECTION_DISTANCE or point['point'][1] < -MAXIMUM_MITOSIS_DETECTION_DISTANCE:
+                raise ValueError(f"Invalid point coordinates for detection: {point['point']}")
+
+            if point['point'][0] > 10 or point['point'][1] > 10:
+                raise ValueError(f"Invalid point coordinates for detection: {point['point']}. Is it possible you used pixel coordinates in the output format? You need to provide the output coordinates in millimeters.")
 
             points.append([*point['point'][0:3], detected_class, detected_thr])
 
@@ -247,8 +323,9 @@ def process_interf0(
 
     bbox_size = 0.01125 # equals to 7.5mm distance for horizontal distance at 0.5 IOU
     
-    sc = score_detection(ground_truth=truth[image_name_histopathology_region_of_interest_cropout]['annotations'],predictions=filtered_predictions,radius=7.5E-3)._asdict()
-
+    sc = score_detection(ground_truth=truth[image_name_histopathology_region_of_interest_cropout]['annotations'],predictions=filtered_predictions,radius=MAXIMUM_MITOSIS_DETECTION_DISTANCE)._asdict()
+    
+ 
     return {
         "image" : image_name_histopathology_region_of_interest_cropout,
         "gt" : truth[image_name_histopathology_region_of_interest_cropout]['annotations'],
