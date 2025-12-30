@@ -1,7 +1,7 @@
 SimpleITK
 numpy
 psutil
-evalutils
+evalutils==0.5.0
 torchmetrics
 pycocotools
 torchvision
